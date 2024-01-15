@@ -76,7 +76,8 @@ if mg.has_field("topographic__elevation", at="node") == False:
     mg.at_node['soil__depth'][:] = soil_init
 
 
-#%%    
+#%% Set model grid boundary conditions
+
 #All boundaries are closed except outlet node
 mg.set_closed_boundaries_at_grid_edges(bottom_is_closed=True,
                                        left_is_closed=True,
@@ -88,19 +89,20 @@ mg.set_watershed_boundary_condition_outlet_id(0,
                                               mg.at_node['topographic__elevation'],
                                               -9999.)
 
+#Shrink initial topography so drainage network is preserved but elevations are cm-scale
 mg.at_node['topographic__elevation'][:] = mg.at_node['topographic__elevation'] * .001
 mg.at_node['bedrock__elevation'][:] = mg.at_node['topographic__elevation']
 
 #%%
+
+#Look at initial topography
 plt.figure(dpi=300)
 imshow_grid(mg, "topographic__elevation")
 plt.title('Initial Topographic Elevation')
 #plt.show()
 #plt.savefig('topo_init_nx200.svg')
-#%%
-#CONFIGURE LITHOLOGY
+#%%Configure lithology and layers
 
-lith_start_time = time.time()
 
 print('configuring lithology')
 K_soft = inputs['K_soft']
@@ -109,10 +111,11 @@ K_ratio = inputs['K_ratio']
 #Erodibility
 K_hard = K_soft / K_ratio
 
-#Used for deposition only
+#Used for deposition only in case litholayers needs to deposit something (it shouldn't)
 K_avg = (K_soft + K_hard) / 2
 
 
+#Set the erodibility (K) of each rock layer using a dict
 lith_attrs = {'K_sp': {1: K_hard, 2: K_soft, 
                   3: K_hard, 4: K_soft,
                   5: K_hard, 6: K_soft,
@@ -122,53 +125,44 @@ lith_attrs = {'K_sp': {1: K_hard, 2: K_soft,
 
 layer_thickness = inputs['layer_thickness']
 
+#layers repeat from 1-10 4 times
 layer_ids = np.tile(list(range(1, 11)), 4)
 
+#calculate max depth needed for given number of layers
 max_depth =(layer_thickness*len(layer_ids))+layer_thickness
 
-#bottom layer is extra thick      
+#make the bottom layer extra thick so it doesn't get eroded through      
 layer_depths = np.arange(layer_thickness, max_depth, layer_thickness)
 layer_depths[-1] += 300
 
-
+#instantitae litholyaers
 lith = LithoLayers(mg, 
                     layer_depths, 
                     layer_ids,
                     attrs=lith_attrs,
                     layer_type='MaterialLayers',
-                    rock_id=11)
+                    rock_id=10) 
 
 
-lith_end_time = time.time()
-lith_time = round((lith_end_time - lith_start_time)  / 60)
-print('Lithology complete, time =', lith_time, 'minutes')
+#%% Instantiate flow components
 
-dz_init = lith.dz.copy()
-
-#%%
-#INSTANTIATE FLOW COMPONENTS
-m_sp = inputs['m_sp']
-n_sp = inputs['n_sp']
-
-print('Initiating flow router')
-
-#fa = FlowAccumulator(mg, flow_director='D8') #TODO Remove?
+#instantiate flow routing
 fr = PriorityFloodFlowRouter(mg, flow_metric='D8', suppress_out = True)
-
 fr.run_one_step()
 
-print('Initial flow routing complete')
+#%% Instantiate SPACE component 
 
-#%%
-#INSTANTIATE SPACE
 
-K_sed = inputs['K_sed']
-F_f = inputs['F_f']
-phi = inputs['phi']
-H_star = inputs['H_star']
-v_s = inputs['v_s']
-sp_crit_sed = inputs['sp_crit_sed']
-sp_crit_br = inputs['sp_crit_br']
+m_sp = inputs['m_sp'] #stream power exponent
+n_sp = inputs['n_sp'] #stream power exponent
+K_sed = inputs['K_sed'] #sediment erodibility
+F_f = inputs['F_f'] #fraction of fines/wash load 
+phi = inputs['phi'] #sediment porosity
+H_star = inputs['H_star'] #sediment entrainment length scale
+v_s = inputs['v_s'] #particle settling velocity
+sp_crit_sed = inputs['sp_crit_sed'] #threshold for sediment erosion
+sp_crit_br = inputs['sp_crit_br'] #threshold for bedrock erosion
+
 
 space = SpaceLargeScaleEroder(mg,
            K_sed =K_sed,
@@ -183,34 +177,29 @@ space = SpaceLargeScaleEroder(mg,
            sp_crit_br = sp_crit_br)
 
 #space runtime parameters
-space_dt = inputs['space_dt'] #years
-space_uplift = inputs['space_uplift']
-space_runtime = inputs['space_runtime']
+space_dt = inputs['space_dt'] #timestep in years
+space_uplift = inputs['space_uplift'] #m/yr
+space_runtime = inputs['space_runtime'] #total model runtime in years
 space_runtime_kyr = int(space_runtime / 1000) #for labeling output files, plots
 
 #Array of all time steps
 t = np.arange(0, space_runtime+space_dt, space_dt)
 nts = len(t)
 
-#Save initial K_br array to compare to output/make sure it's updating
-space_k_int = space.K_br
+#set how often you want to save model output
+if nx <= 50:
+    save_interval = 1000
+else:
+    save_interval = 10000
 
-#Telling lithology which rock type to deposit when deposition occurs
-#Can change this to be spatially variable, setting at type 2 to see if/where deposition is happening
-lith.rock_id=10
 
-# if nx <= 50:
-#     save_interval = 1000
-# else:
-#     save_interval = 10000
-
-save_interval = 1000
-
+#create an array of all the model times where data will be saved
 out_times = np.arange(0, space_runtime+save_interval, save_interval)
 out_count = len(out_times)
 
 #%%
 #Create Xarray dataset to save model output
+#Each landlab model grid field is saved as a data_var
 
 ds = xr.Dataset(
     data_vars={
@@ -273,7 +262,7 @@ ds = xr.Dataset(
             'standard_name': 'time'
         })
     },
-    attrs=dict(inputs))
+    attrs=dict(inputs)) #save the model inputs to the dataset's metadata
     
     
 #%%
@@ -284,31 +273,30 @@ K_sed_ratio = K_sed_ratio.replace('.', '')
 
 v_s_str = str(round(v_s))
 
+#create file id based on input parameters
 file_id = f'Mixed_{space_runtime_kyr}kyr_nx{nx}_Kr{K_ratio}_Ksr{K_sed_ratio}_Vs{int(v_s_str)}_{int(layer_thickness)}mlayers'  
 
-print(file_id)
+
+#%%Uncomment this block to createa a new folder to save the model output to and change the working directory to that folder (optional)
+
+#path = Path.cwd() / file_id
+#path.mkdir(exist_ok=True)
+#chdir(path)
 
 
-#%%
-
-path = Path.cwd() / file_id
-path.mkdir(exist_ok=True)
-chdir(path)
-
-
-#%%
-#Evolve the landscape!
+#%% Run the model!
 
 #Track how long it takes loop to run
 start_time = time.time()
 
 elapsed_time = 0
 
+#Create model grid fields to store erosion rates at each cell
 #Note - both of these are [m/yr] - length per time
 E_s = mg.add_zeros('sediment__erosion', at='node')
 E_r = mg.add_zeros('bedrock__erosion', at='node')
 
-#Output field for xarray dataset
+#Grid fields to be saved to xarray dataset
 out_fields = ['topographic__elevation', 
               'rock_type__id', 
               'soil__depth', 
@@ -316,10 +304,11 @@ out_fields = ['topographic__elevation',
               'bedrock__erosion',
               'sediment__erosion']
 
-#Save initial condition to xarray output
+#Save initial condition at time 0 to xarray output
 for of in out_fields:
     ds[of][0, :, :] = mg['node'][of].reshape(mg.shape)
 
+#filename for the xarrray dataset
 ds_file = file_id + "_ds.nc"
 
 print('Starting SPACE loop')
@@ -336,7 +325,7 @@ for i in range(nts):
     #Layers are advected upwards due to uplift
     dz_ad = np.zeros(mg.size('node'))
     dz_ad[mg.core_nodes] = space_uplift * space_dt
-    mg.at_node['bedrock__elevation'] += dz_ad
+    mg.at_node['bedrock__elevation'] += dz_ad 
     lith.dz_advection=dz_ad
     
     #Recalculate topographic elevation to account for rock uplift
@@ -348,9 +337,7 @@ for i in range(nts):
     
     #Update space K values
     space.K_br = mg.at_node['K_sp']
-    
-    if elapsed_time %1000 == 0:
-        print(elapsed_time)
+
 
     if elapsed_time %save_interval== 0:
         
@@ -370,51 +357,15 @@ for i in range(nts):
         us_outlet_Q = mg.at_node['surface_water__discharge'][51]
         outlet_Q = mg.at_node['surface_water__discharge'][0]
         
-        print(elapsed_time, ds_ind, outlet_Q, outlet_Q==us_outlet_Q)
-        #ds.to_netcdf(ds_file)
+        print(elapsed_time, ds_ind)
+        ds.to_netcdf(ds_file)
     
     elapsed_time += space_dt
 
 end_time = time.time()
 loop_time = round((end_time - start_time) / 60)
 print('Loop time =', loop_time)
-#%%
+#%%plot final topography 
 
 imshow_grid(mg, "topographic__elevation")
 plt.title('Final Topographic Elevation')
-
-#%%
-
-#save xr dataset to netcdf
-ds_file = file_id + "_ds_final.nc"
-#ds.to_netcdf(ds_file)
-
-
-#%%
-# plot_time = 40000
-# plot_time_kyr = int(plot_time/1000)
-# fig=plt.figure(figsize=(10,8))
-# ds.topographic__elevation.sel(time=plot_time).plot(cmap='pink')
-# plt.title(f'Topography at {plot_time_kyr} kyr, Vs = 3.0 m/yr', fontsize = 20)
-
-#%%
-
-'''
-out_path = Path('C:\\Users\\gjg882\\Box\\UT\\Research\\Code\\space\\space_paper\\mixed_driver_master\\test_dir')
-out_path.mkdir(exist_ok=True)
-
-
-ds_out_file = str(out_path) + ds_file
-ds.to_netcdf(ds_out_file)
-
-
-#save xr dataset to netcdf
-ds_file = file_id + "_ds_final.nc"
-ds.to_netcdf(ds_file)
-
-#save model grid to netcdf
-mg_title_string = file_id + "_mg.nc"
-mg_attrs = dict(inputs)
-write_netcdf(mg_title_string, mg, attrs=mg_attrs)
-
-'''
