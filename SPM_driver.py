@@ -40,8 +40,8 @@ from landlab.components import (FlowAccumulator,
 #LOAD INPUT FILES HERE 
 
 #Initial Topography
-#mg = read_netcdf('drainage_maker_fsc_3000kyr_nx200_mg_attrs.nc')
-mg = read_netcdf('NoLayers_20mdx_500kyr_n15_mg.nc')
+#mg = read_netcdf('topo_init_200x200.nc') #200x200 cell grid
+#mg = read_netcdf('topo_init_50x50.nc') #50x50 cell grid
 
 #load Parameters
 #inputs = load_params('dtch_params_1200kyr_nx200_Kr5.txt')
@@ -60,19 +60,20 @@ lith_cmap = plt.cm.get_cmap('Paired', 10)
 model_name = inputs['model_name']
 
 #%%
-#Uncomment this section if initial grid was created with Fastscape eroder (only the 50x50 grids were made w SPACE)
+#Needed if using the 200x200 grid created with Fastscape eroder - add grid fields (only the 50x50 grids were made w SPACE)
 
-# #Create a field for bedrock elevation
-# mg.add_zeros('node', 'bedrock__elevation')
-
-# #Initial soil depth, m
-# soil_init = inputs['soil_init']
-
-# #Create a grid field for soil depth
-# mg.add_zeros('node', 'soil__depth')
-
-# #Add initial layer of soil
-# mg.at_node['soil__depth'][:] = soil_init
+if nx == 200:
+    #Create a field for bedrock elevation
+    mg.add_zeros('node', 'bedrock__elevation')
+    
+    #Initial soil depth, m
+    soil_init = inputs['soil_init']
+    
+    #Create a grid field for soil depth
+    mg.add_zeros('node', 'soil__depth')
+    
+    #Add initial layer of soil
+    mg.at_node['soil__depth'][:] = soil_init
 
 
 #%%    
@@ -174,13 +175,12 @@ nts = len(t)
 
 
 #Telling lithology which rock type to deposit when deposition occurs
-#Can change this to be spatially variable, setting at type 2 to see if/where deposition is happening
 lith.rock_id=10
 
-# if nx <= 50:
-#     save_interval = 1000
-# else:
-#     save_interval = 10000
+if nx <= 50:
+    save_interval = 1000
+else:
+    save_interval = 10000
 
 save_interval = 1000
 
@@ -257,7 +257,7 @@ chdir(path)
 #%%
 
 fsc.run_one_step(dt=fsc_dt)
-alpha_test = fsc._alpha
+
 
 
 #%%
@@ -288,20 +288,17 @@ print('Starting LEM loop')
 for i in range(nts):
     
     
-    #create a copy of original topography before erosion
-    
+    #create a copy of original topography before erosion - used to calculate erosion rate
     topo_orig =  mg.at_node['topographic__elevation'].copy()
     
     #New priority flow router component
     fa.run_one_step()
     
-    #erode with space
+    #erode with fastscape
     _ = fsc.run_one_step(dt=fsc_dt)
     
-    
-    #E_r_term = fsc._alpha / fsc_dt
+    #Calculate erosion rate at each cell
     E_r_term = (topo_orig - mg.at_node['topographic__elevation'][:]) / fsc_dt
-    
     
     mg.at_node['bedrock__erosion'][:] = E_r_term
 
@@ -336,7 +333,7 @@ for i in range(nts):
             ds[of][ds_ind, :, :] = mg['node'][of].reshape(mg.shape)
         
         print(elapsed_time, ds_ind, outlet_Qs)
-        #ds.to_netcdf(ds_file)
+        ds.to_netcdf(ds_file)
        
     
     elapsed_time += fsc_dt
@@ -359,40 +356,4 @@ ds_file = file_id + "_ds_final_Qs.nc"
 df = pd.DataFrame({ 'outlet_Qs': outlet_Qs_arr })
 df['time']=pd.Series(t)
 
-#%%
-# plot_time = 40000
-# plot_time_kyr = int(plot_time/1000)
-# fig=plt.figure(figsize=(10,8))
-# ds.topographic__elevation.sel(time=plot_time).plot(cmap='pink')
-# plt.title(f'Topography at {plot_time_kyr} kyr, Vs = 3.0 m/yr', fontsize = 20)
 
-#%%
-
-'''
-out_path = Path('C:\\Users\\gjg882\\Box\\UT\\Research\\Code\\space\\space_paper\\mixed_driver_master\\test_dir')
-out_path.mkdir(exist_ok=True)
-
-
-ds_out_file = str(out_path) + ds_file
-ds.to_netcdf(ds_out_file)
-
-
-#save xr dataset to netcdf
-ds_file = file_id + "_ds_final.nc"
-ds.to_netcdf(ds_file)
-
-#save model grid to netcdf
-mg_title_string = file_id + "_mg.nc"
-mg_attrs = dict(inputs)
-write_netcdf(mg_title_string, mg, attrs=mg_attrs)
-
-'''
-
-#%%
-
-plt.figure()
-plt.plot(t, outlet_Qs_arr)
-
-#%%
-
-df.to_csv('dtch_outlet_qs.csv')
