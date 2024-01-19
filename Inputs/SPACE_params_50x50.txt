@@ -1,0 +1,36 @@
+model_name: 'Mixed'  #Choose between 'Mixed' or 'Detachment Limited', can also use 'SPACE' or 'SPM' - anything else will break plotting scripts
+
+#configure model grid
+nx: 50
+ny: 50
+dx: 20 
+
+soil_init: 0. 
+
+#configure layers
+K_soft: 1e-5
+K_ratio: 5
+
+layer_thickness : 40. #meters
+
+
+#stream power exponents
+m_sp : .75
+n_sp : 1.5
+
+K_sed : 0.00001
+F_f : 0
+phi : 0.1
+H_star : 1.
+v_s : 3.0
+sp_crit_sed : 0
+sp_crit_br : 0 
+
+#years
+space_dt: 40.
+
+#m/yr
+space_uplift : .001 
+
+#years
+space_runtime : 1200000 
