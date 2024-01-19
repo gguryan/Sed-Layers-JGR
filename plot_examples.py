@@ -52,10 +52,14 @@ plot_time = 1200000
 #plot_time = ds.attrs['space_runtime'] #for space model runs
 #plot_time = ds.attrs['fsc_runtime'] #for SPM runs
 
+
 #%%
 
 #Calculate main channel, return landlab model grid with channel profiler fields, also returns pandas df with channel data
 mg, df = calc_main_channel(ds, plot_time)
 
+fig1 = plt.figure()
 plot_ksn(ds, plot_time)
 
+fig2 = plt.figure()
+plot_channel_prf(df, ds, plot_time, plot_sed=True, plot_ero=False, ax=None)
