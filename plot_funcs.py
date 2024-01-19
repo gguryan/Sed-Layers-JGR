@@ -1,16 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jan 16 20:02:52 2024
+Created on Wed Jan 17 16:31:24 2024
 
 @author: gjg882
 """
 
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jun  8 09:41:44 2022
+
+@author: gjg882
+"""
+
+#%%
 import numpy as np
 from matplotlib import pyplot as plt
+import matplotlib.colors as colors
+
+
 from matplotlib.gridspec import  GridSpec
-
+from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
-
 from matplotlib.offsetbox import AnchoredText
 
 import seaborn as sns
@@ -19,8 +29,9 @@ import xarray as xr
 
 import pandas as pd
 
+
+
 from landlab import RasterModelGrid
-from landlab import load_params
 from landlab.plot import imshow_grid
 from landlab.components import (FlowAccumulator, 
                                 DepressionFinderAndRouter,
@@ -30,45 +41,80 @@ from landlab.components import (FlowAccumulator,
                                 ChiFinder)
 
 
-#%%USER INPUTS
-
-#string to name exported plot files 
-file_id = 'dtch_1200kyr_nx200'
-
-#open xarray dataset of saved model output
-ds_file = 'C:/Users/gjg882/Box/UT/Research/Code/space/space_paper/big_grid_figs/dtch_1200kyr_nx200_Kr5_ds_final.nc'
-
-# optional - select the time to plot
-# plot_time = 800000
-
 #%%
+
+#Label for output filenames - model type, runtime, grid size, bedrock erdobility ratio, misc. 
+
+#file_id = 'Mixed_1200kyr_nx50_Kr5_Ksr1_Vs3_60mlayers'
+#ds_file = 'C:/Users/gjg882/Box/UT/Research/Code/space/space_paper/mixed_driver_master/Mixed_1200kyr_nx50_Kr5_Ksr1_Vs3_60mlayers/Mixed_1200kyr_nx50_Kr5_Ksr1_Vs3_60mlayers_ds_final.nc'
+
+#file_id = 'dtch_1200kyr_nx50_Kr5'
+#ds_file = 'C:/Users/gjg882/Box/UT/Research/Code/space/space_paper/dtch_driver_master/dtch_1200kyr_nx50_Kr5_fsc_ero/dtch_1200kyr_nx50_Kr5_fsc_ero_ds_final.nc'
+
+
+file_id = 'mixed_1200kyr_nx50_Kr5_Ksr1_Vs1'
+ds_file = 'C:/Users/gjg882/Box/UT/Research/Code/space/space_paper/mixed_driver_master/Mixed_1200kyr_nx50_Kr5_Ksr1_Vs1/Mixed_1200kyr_nx50_Kr5_Ksr1_Vs1_ds_final.nc'
+
+#file_id = 'mixed_1200kyr_nx50_Kr5_Ksr1_Vs3'
+#ds_file = 'C:/Users/gjg882/Box/UT/Research/Code/space/space_paper/mixed_driver_master/Mixed_1200kyr_nx50_Kr5_Ksr1_Vs3/Mixed_1200kyr_nx50_Kr5_Ksr1_Vs3_ds_final.nc'
+
+#file_id = 'mixed_1200kyr_nx50_Kr5_Ksr1_Vs5'
+#ds_file = 'C:/Users/gjg882/Box/UT/Research/Code/space/space_paper/mixed_driver_master/Mixed_1200kyr_nx50_Kr5_Ksr1_Vs5/Mixed_1200kyr_nx50_Kr5_Ksr1_Vs5_ds_final.nc'
+
+
+
 #load in model output
+
 ds = xr.open_dataset(ds_file) 
 
 #load in parameters
-ds_attrs = ds.attrs
+#ds_attrs = ds.attrs
 
-plot_time = ds.attrs['space_runtime']
+#Select model time (in years) to plot
+plot_time = 1200000
+#plot_time = ds.attrs['space_runtime']
 
-rock = ds.rock_type__id.sel(time=plot_time)
 
-#%%
-#Define function to run channel profiler, calculate steepness, and calculate chi for a given time in xarray dataset
 
-def channel_calcs(ds, plot_time, sf_min_DA, cf_min_DA):
+
+#TODO
+
+#%%Calculate the main channel profile and extract data from along the profile
+
+def calc_main_channel(ds, plot_time, sf_min_DA=500, cf_min_DA=500):
+
+    """
+    Function runs channel profiler, calculates steepness, and calculates chi for a given time in xarray dataset
+
+    Parameters
+    ----------
+    ds : xarray dataset with model output
+
+    plot_time : the desired time point to plot from the xarray dataset
+
+    sf_min_DA : the minimum drainage area to use for the steepness finder component
     
+    cf_min_DA : the minimum drainage area to use for the chi finder component
+
+    Returns
+    -------
+    out : mg, df
+        mg : landlab model grid 
+        df : data frame of points along the main channel profile with xy coords, ksn, erosion rates, rock type, etc
+    """
+
     ds_attrs = ds.attrs
     
     nx = ds_attrs['nx']
     ny = ds_attrs['ny']
     dx = ds_attrs['dx']
-    model_name = ds_attrs['model_name']
 
     #m and n are the same for both fastscape and space
     m_sp = ds_attrs['m_sp']
     n_sp = ds_attrs['n_sp']
     
     theta = m_sp / n_sp
+    
     
     #make model grid using topographic elevation at desired time
     mg = RasterModelGrid((nx, ny), dx)
@@ -92,7 +138,7 @@ def channel_calcs(ds, plot_time, sf_min_DA, cf_min_DA):
         mg.has_field('node', 'bedrock__erosion')
         Er is mg.add_field('node', 'bedrock__erosion', Er, dtype=float)
     
-    if model_name == 'SPACE':
+    if model_name == 'Mixed' or model_name == 'SPACE':
         
         #Add soil depth to model grid
         sed_depth = ds.soil__depth.sel(time=plot_time)
@@ -104,7 +150,7 @@ def channel_calcs(ds, plot_time, sf_min_DA, cf_min_DA):
         mg.has_field('node', 'sediment__erosion')
         Es is mg.add_field('node', 'sediment__erosion', Es, dtype=float)
 
-    
+
     #Run flow accumulator
     fa = FlowAccumulator(mg, flow_director='D8')
     fa.run_one_step()
@@ -125,7 +171,6 @@ def channel_calcs(ds, plot_time, sf_min_DA, cf_min_DA):
     prf_keys = list(prf.data_structure[0])
     
     
-
     channel_dist = prf.data_structure[0][prf_keys[0]]['distances']
     channel_dist_ids = prf.data_structure[0][prf_keys[0]]['ids']
     channel_elev = mg.at_node["topographic__elevation"][channel_dist_ids]
@@ -158,7 +203,7 @@ def channel_calcs(ds, plot_time, sf_min_DA, cf_min_DA):
         channel_Er = mg.at_node['bedrock__erosion'][channel_dist_ids] 
         df['channel_Er'] = channel_Er
     
-    if model_name == 'SPACE':
+    if model_name == 'Mixed' or model_name == 'SPACE':
         
         #add sediment data for SPACE model runs
         channel_sed_depth = mg.at_node['soil__depth'][channel_dist_ids]
@@ -166,20 +211,47 @@ def channel_calcs(ds, plot_time, sf_min_DA, cf_min_DA):
         
         channel_Es = mg.at_node['sediment__erosion'][channel_dist_ids]  
         df['channel_Es'] = channel_Es
-            
-    #drop first row of dataframe - this is the outlet node
-    df1 = df.iloc[1: , :]    
     
-    return mg, df1
+    #remove outlet node      
+    df_out = df.iloc[1: , :]
+        
+    return mg, df_out
 
-#%%
+#%%Plot main channel profile
 
-def plot_prf_fig3 (df, plot_time, model_name, save_fig, file_id, panel_label):
+def plot_channel_prf(df, plot_time, model_name, save_fig, plot_sed, plot_ero):
     
-    #colormap for plotting
-    #lith_cmap=plt.cm.get_cmap('Paired', 10)
+    
+    """
+    Function runs channel profiler, calculates steepness, and calculates chi for a given time in xarray dataset
+
+    Parameters
+    ----------
+    df : dataframe of channel profile data created using calc_main_channel function
+
+    plot_time : the desired time point to plot from the xarray dataset
+    
+    model_name : "Detachment Limited" or "Mixed"
+
+    save_fig : If True, export the figure as a .svg file named according to model input params
+    
+    plot_sed : If True, plot sediment thickness on a secondary y-axis
+    
+    plot_ero: If True, plot erosion rates on a secondary y-axis
+    
+    Note - the profile sediment or erosion rate should only be plotted one at a time
+
+    Returns
+    -------
+    None
+    #TODO reconfigure code so each plot can be passed to an axes on an exisiting figure?
+    #TODO idk feels like a lot of work??
+
+    """
+    
+    #new colormap using seaborn
     lith_cmap = sns.color_palette("Paired", 10, as_cmap=True)
-    
+
     #Convert time to kyr for labels
     plot_time_kyr = int(plot_time / 1000)
     plot_time_myr = plot_time / 1000000
@@ -188,12 +260,16 @@ def plot_prf_fig3 (df, plot_time, model_name, save_fig, file_id, panel_label):
     groups = df.groupby('channel_rock_id')
     
     #make the figure
-    #size used to be 10,4
-    fig = plt.figure(constrained_layout=True, figsize=(8, 4), dpi=300)
-
+    #fig = plt.figure(constrained_layout=True, figsize=(14, 4), dpi=300)
     
+    
+    #make the figure
+    fig = plt.figure(constrained_layout=True, figsize=(14, 4), dpi=300)
+    
+
     #plot channel profile in top row
-    ax1 = fig.add_subplot()
+    ax1 = fig.add_subplot(111)
+    
     
     for name, group in groups:
         
@@ -218,77 +294,245 @@ def plot_prf_fig3 (df, plot_time, model_name, save_fig, file_id, panel_label):
                           markerfacecolor='dimgrey', markersize=10),
                    Line2D([0], [0], marker='s', color='w', label='Hard Rock',
                           markerfacecolor='dimgrey', markersize=10),
-                   Line2D([0], [0], color='dimgrey', lw=2, label='Sediment Thickness')]
+                   Line2D([0], [0], color='dimgrey', lw=2, label='Sediment Depth')]        
+    
 
-    #ax1.legend(title="Layer ID")
-
+    ax1.legend(title="Layer ID")
     ax1.set_xlabel('Distance Upstream (m)')
     ax1.set_ylabel('Elevation (m)')
-    ax1.set_ylim(top=450)
-    ax1.set_xlim(left=0)
-    
-    anchored_text = AnchoredText(panel_label, loc='upper left', prop=dict(fontsize="14"))
-    ax1.add_artist(anchored_text)   
-    
-    if model_name == 'SPM':
-        
-        title_string = f"{model_name} Model, Time={plot_time_myr} myr"
-        
-        
-        #ax1.legend(loc='best', title='Layer ID', bbox_to_anchor=[0.09, 0.85],) #use this one to include layer colors in legend
-        
-        ax1.legend(handles=legend_elements_dtch, loc='best')
-        ax=ax1.twinx()
-        ax.set_ylabel("TEST")
-        ax.yaxis.label.set_size(12)
-    
-        
-        '''
-        
-        ax=ax1.twinx()
-        
-       
-        ax.plot(df['channel_dist'], df['channel_Er'], '-', color = 'blue', label = 'Bedrock Erosion Rate')
-        ax.set_ylabel("Erosion Rate (m/yr)")
-        
-        ax.plot(df['channel_dist'], df['uplift'], '--', color = 'dimgrey', label = 'Uplift Rate')
-        '''
-    
-    if model_name == 'SPACE':
-        
-        v_s_round = np.around(ds.attrs['v_s'])
-        
-        #title_string = f"Main Channel Profile, {model_name} Model, Time={plot_time_kyr} kyr, V={v_s_round} m/yr"
-        title_string = f"{model_name} Model, Time={plot_time_kyr} kyr, V={v_s_round} m/yr"
-        
-        #ax1.legend(handles=legend_elements_mixed, bbox_to_anchor=[0.1, 0.8], loc='center left')
-        ax1.legend(loc='best', title='Layer ID', bbox_to_anchor=[0.1, 0.85],) #use this one to include layer colors in legend
-        
-        
-        
-        #Add sediment depth to channel profile w/ secondary y-axis
-        ax=ax1.twinx()
-        ax.plot(df['channel_dist'], df['channel_sed_depth'], '-', color = 'dimgrey', label = 'Sediment Thickness')
-        ax.set_ylabel("Sediment Thickness H (m)")
-        ax.set_ylim(top=2.25)
-        #ax.legend(loc='best')
-        
-        ax.tick_params(axis="x", labelsize=12)
-        ax.tick_params(axis="y", labelsize=12)
-        ax.xaxis.label.set_size(12)
-        ax.yaxis.label.set_size(12)
-    
- 
-    ax1.set_title(title_string)
+    ax1.set_ylim(top=600)
     
     ax1.tick_params(axis="x", labelsize=12)
     ax1.tick_params(axis="y", labelsize=12)
     
     ax1.xaxis.label.set_size(12)
     ax1.yaxis.label.set_size(12)
+ 
     
 
+    ax1.set_xlim(left=0)
     
+    if plot_sed == True:
+        
+        
+        if model_name == 'Mixed' or model_name == 'SPACE': #either naming convention will work
+            #Add sediment depth to channel profile w/ secondary y-axis
+            title_string = f"Main Channel Profile, {model_name} Model, Time={plot_time_myr} myr, V={ds.attrs['v_s']}"
+            ax=ax1.twinx()
+            ax.plot(df['channel_dist'], df['channel_sed_depth'], '-', color = 'dimgrey', label = 'Sediment Thickness')
+            ax.set_ylabel("Sediment Thickness H (m)")
+            ax.set_ylim(top=2.25)
+            #ax.legend(loc='best')
+            
+            ax.tick_params(axis="x", labelsize=12)
+            ax.tick_params(axis="y", labelsize=12)
+            ax.xaxis.label.set_size(12)
+            ax.yaxis.label.set_size(12)
+            
+            ax.set_yticks([0.0, 0.5, 1.0, 1.5, 2.0])
+            
+            file_string = 'SedThickness_' + file_id + '.svg'
+        
+        if model_name == 'Detachment Limited' or  model_name == 'SPM':
+            print('No sediment to plot')
+            file_string = 'MainPrf_' + file_id + '.svg'
+    
+    if plot_ero == True and plot_sed == True:
+        raise Exception('Cannot plot sediment and erosion rate superimposed on the same figure')
+    
+    if plot_ero == True:
+    
+        file_string = 'EroRates_' + file_id + '.svg'
+        
+        ax=ax1.twinx()
+        
+        if model_name == 'Detachment Limited' or  model_name == 'SPM':
+            
+            title_string = f"{model_name}, Time={plot_time_myr} myr"
+            
+            ax1.legend(handles=legend_elements_dtch, loc='best')
+            
+           
+            ax.plot(df['channel_dist'], df['channel_Er'], '-', color = 'blue', label = 'Bedrock Incision Rate')
+            ax.set_ylabel("Incision/Entrainment/Uplift Rate (m/yr)")
+            
+            
+            ax.plot(df['channel_dist'], df['uplift'], '--', color = 'dimgrey', label = 'Uplift Rate')
+
+        
+        if model_name == 'SPACE'or model_name == 'Mixed':
+            
+            v_s_round = np.round(ds.attrs['v_s'])
+            
+            #title_string = f"Main Channel Profile, {model_name} Model, Time={plot_time_myr} myr, V={v_s_round} m/yr"
+            title_string = file_id
+            
+            ax1.legend(handles=legend_elements_mixed, loc='best')
+            
+            #Add sediment depth to channel profile w/ secondary y-axis
+            #ax=ax1.twinx()
+            ax.plot(df['channel_dist'], df['channel_Es'], '-', color = 'red', label = 'Sediment Entrainment Rate')
+            
+            
+            #ax.set_ylim(top=2.25)
+            #ax.legend(loc='best')
+            
+            ax.plot(df['channel_dist'], df['uplift'], '--', color = 'dimgrey', label = 'Uplift Rate')
+            
+            ax.plot(df['channel_dist'], df['channel_Er'], '-', color = 'blue', label = 'Bedrock Erosion Rate')
+            
+            ax.set_ylabel("Incision/Uplift Rate (m/yr)")
+            
+    else:
+        #title_string = f"Main Channel Profile, {model_name} Model, Time={plot_time_kyr} kyr"
+        title_string = f"Main Channel Profile, {model_name} Model, Time={plot_time_myr} myr"
+        file_string = 'MainPrf_' + file_id + '.svg'
+    
+    ax1.set_title(title_string)
+        
     if save_fig == True:
-        file_string = 'PRF_sed_depth' + file_id + '.svg'
-        fig.savefig(file_string);
+        fig.savefig(file_string)
+
+
+
+#%%Calculate expected steepness
+
+def calc_ksn_expected(ds):
+    
+    """
+    Function calculates the expected channel steepness value for the soft and hard rock layers
+    Calculation uses equation 6 for stream power model runs and equation 7 for space model runs
+    
+    Parameters
+    ----------
+    ds : xarray dataset with model output 
+
+    Returns
+    -------
+    out : ksn_soft, ksn_hard
+            ksn_soft : expected steepness in soft rock layers
+            ksn_hard : expected steepness in hard rock layers
+    """
+    
+    #read in variables from xarray dataset metadata
+    model_name = ds.attrs['model_name']
+    K_soft = ds.attrs['K_soft']
+    K_hard = K_soft / ds.attrs['K_ratio']
+    n = ds.attrs['n_sp']
+    
+        
+    #calculate expected ksn using equation 6 for SPM runs
+    if model_name == 'SPM' or model_name == 'Detachment Limited':
+        U = ds.attrs['fsc_uplift']
+        ksn_soft = (U/K_soft)**(1/n)
+        ksn_hard = (U/K_hard)**(1/n)
+    
+    #Calculate expected ksn using equation 7 for SPACE model runs
+    if model_name == 'SPACE' or model_name == 'Mixed':
+        
+        U = ds.attrs['space_uplift']
+        V = ds.attrs['v_s']
+        K_sed = ds.attrs['K_sed']
+        ksn_soft = (U * ((V/K_sed) + (1/K_soft)))**(1/n)
+        ksn_hard = (U * ((V/K_sed) + (1/K_hard)))**(1/n)
+        
+    return ksn_soft, ksn_hard
+        
+#%%
+
+def plot_ksn(ds, plot_time, ax=None):
+    
+    if ax is None:
+        ax = plt.gca()
+    
+    ksn_soft, ksn_hard = calc_ksn_expected(ds)
+    
+    mg, df = calc_main_channel(ds, plot_time)
+    
+    lith_cmap = sns.color_palette("Paired", 10, as_cmap=True)
+    
+    groups = df.groupby('channel_rock_id')
+    
+    ax.axhline(y=ksn_soft ,c="k")
+    ax.axhline(y=ksn_hard ,c="dimgrey", linestyle='--')
+    
+    
+    #Set the marker for each point based on layer number 
+    for name, group in groups:
+        
+        #Even-numbered layers are soft rock and get round markers
+        if name %2 == 0:
+        
+            ax.plot(group.channel_dist, group.channel_ksn, 
+                    marker='o', markeredgewidth=0.5, markeredgecolor='dimgrey', 
+                    linestyle='', markersize=5, label=name, 
+                    color=lith_cmap(int(name)-1))
+       
+        #Odd-numbered layers are hard rock and are plotted with square markers
+        else:
+            ax.plot(group.channel_dist, group.channel_ksn, 
+                    marker='s', markeredgewidth=0.5, markeredgecolor='dimgrey', 
+                    linestyle='', markersize=5, label=name, 
+                    color=lith_cmap(int(name)-1))
+            
+    legend_elements = [Line2D([0], [0], marker='o', color='w', label='Soft Rock',
+                          markerfacecolor='dimgrey', markersize=10),
+                   Line2D([0], [0], marker='s', color='w', label='Hard Rock',
+                          markerfacecolor='dimgrey', markersize=10),
+                   Line2D([0], [0], color='dimgrey', lw=2, label='Hard Rock Exp. ksn', linestyle='--'),
+                   Line2D([0], [0], color='k', lw=2, label='Soft Rock Exp. ksn')]
+    
+    
+    ax.legend(handles=legend_elements, loc='upper left')
+
+    
+    ax.tick_params(axis="x", labelsize=12)
+    ax.tick_params(axis="y", labelsize=12)
+    
+    ax.xaxis.label.set_size(12)
+    ax.yaxis.label.set_size(12)
+        
+    title_string = "Main Channel Steepness Index"
+    #ax3.legend(title="Layer ID", loc=1, ncol=2)
+    ax.set_xlabel('Distance Upstream (m)')
+    ax.set_ylabel("$k_{sn}$", style='italic')
+    ax.set_title(title_string)
+    ax.set_ylim(bottom=0, top=350)
+    
+    return(ax)
+
+
+#%%
+
+#Load parameters from attributes dictionary into variables
+
+model_name = ds.attrs['model_name']
+
+#update model name to make plot labels consistent with manuscript
+if model_name == 'Mixed':
+    ds.attrs['model_name'] = 'SPACE'
+
+if model_name == 'Detachment Limited':
+    ds.attrs['model_name'] = 'SPM'
+
+
+
+
+#%%FUNCTION CALLS
+
+
+plot_time = 1200000
+
+
+#ksn_soft, ksn_hard = space_ksn_exp(ds)
+#mg, df = channel_calcs(ds, plot_time, sf_min_DA, cf_min_DA)
+#mg, df = calc_main_channel(ds, plot_time, sf_min_DA, cf_min_DA)
+#df_trim = df.drop(df.index[-2:]) #Manually remove reaches of the channel with less than 3 nodes per reach
+#plot_channel_prf(df, plot_time, model_name, save_fig=False, plot_sed=False, plot_ero=True)
+
+plot_ksn(ds, plot_time)
+
+
+
+
+
