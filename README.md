@@ -1,6 +1,6 @@
 # Sed-Layers-JGR
 
-Code for manuscript "Sediment cover modulates landscape erosion patterns and channel steepness in layered rocks: Insights from the SPACE Model" submitted to Journal of Geophysical Research: Earth Surface on 10/28/23
+Code for manuscript "Sediment cover modulates landscape erosion patterns and channel steepness in layered rocks: Insights from the SPACE Model" submitted to Journal of Geophysical Research: Earth Surface on 10/28/23 and currently availabile as a [preprint](https://essopenarchive.org/users/695126/articles/683952-sediment-cover-modulates-landscape-erosion-patterns-and-channel-steepness-in-layered-rocks-insights-from-the-space-model)
 
 Both driver scripts require a .txt file with model inputs and a .netcdf file with some initial topography/drainage network.
 Readers are referred to the [manual by Shobe et al. 2017](https://figshare.com/articles/dataset/pub_shobe_etal_GMD/5193478/1) for a more complete description of input parameters 
