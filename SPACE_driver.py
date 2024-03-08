@@ -38,30 +38,20 @@ from landlab.components import (FlowAccumulator,
 #LOAD INPUT FILES HERE 
 
 #Initial Topography - 200x200 grid
-#mg = read_netcdf('mixed_driver_master/drainage_maker_fsc_3000kyr_nx200_mg_attrs.nc')
+mg = read_netcdf('Inputs/topo_init_200x200.nc')
 
-#Initial topography - 50x50 grid
-mg = read_netcdf('NoLayers_20mdx_500kyr_n15_mg.nc')
+#Read in parameters from text file
+inputs = load_params('Inputs/SPACE_params_200x200.txt')
 
-#Space Parameters
-inputs = load_params('params_1200kyr_nx50_Kr5_Ksr10_Vs3.txt')
+#specify a filename to save the model output to
+ds_file = ('Output/SPACE_out_200x200.nc')
 
 
 #%%
 #SET UP MODEL GRID
 
 
-#TODO - Are these lines needed? Move elsewhere?
-dx=inputs['dx']
-nx=inputs['nx']
-lith_cmap = plt.cm.get_cmap('Paired', 10)
-model_name = inputs['model_name']
-
-#%%
-#Uncomment this section if initial grid was created with Fastscape eroder (only the 50x50 grids were made w SPACE)
-
-
-if mg.has_field("topographic__elevation", at="node") == False: 
+if mg.has_field("bedrock__elevation", at="node") == False: 
 
     # #Create a field for bedrock elevation
     mg.add_zeros('node', 'bedrock__elevation')
@@ -104,7 +94,7 @@ plt.title('Initial Topographic Elevation')
 #%%Configure lithology and layers
 
 
-print('configuring lithology')
+print('configuring lithology - may take several minutes')
 K_soft = inputs['K_soft']
 K_ratio = inputs['K_ratio']
 
@@ -186,6 +176,9 @@ space_runtime_kyr = int(space_runtime / 1000) #for labeling output files, plots
 t = np.arange(0, space_runtime+space_dt, space_dt)
 nts = len(t)
 
+
+nx=mg.shape[0]
+
 #set how often you want to save model output
 if nx <= 50:
     save_interval = 1000
@@ -264,24 +257,6 @@ ds = xr.Dataset(
     },
     attrs=dict(inputs)) #save the model inputs to the dataset's metadata
     
-    
-#%%
-
-#K_sed_ratio = str(round(K_sed/K_soft, 1))
-K_sed_ratio = str(int(K_sed/K_soft))
-K_sed_ratio = K_sed_ratio.replace('.', '')
-
-v_s_str = str(round(v_s))
-
-#create file id based on input parameters
-file_id = f'Mixed_{space_runtime_kyr}kyr_nx{nx}_Kr{K_ratio}_Ksr{K_sed_ratio}_Vs{int(v_s_str)}_{int(layer_thickness)}mlayers'  
-
-
-#%%Uncomment this block to createa a new folder to save the model output to and change the working directory to that folder (optional)
-
-#path = Path.cwd() / file_id
-#path.mkdir(exist_ok=True)
-#chdir(path)
 
 
 #%% Run the model!
@@ -308,8 +283,6 @@ out_fields = ['topographic__elevation',
 for of in out_fields:
     ds[of][0, :, :] = mg['node'][of].reshape(mg.shape)
 
-#filename for the xarrray dataset
-ds_file = file_id + "_ds.nc"
 
 print('Starting SPACE loop')
 
@@ -357,7 +330,10 @@ for i in range(nts):
         us_outlet_Q = mg.at_node['surface_water__discharge'][51]
         outlet_Q = mg.at_node['surface_water__discharge'][0]
         
-        print(elapsed_time, ds_ind)
+        end_time = time.time()
+        loop_time = round((end_time - start_time) / 60)
+        
+        print(elapsed_time, ds_ind, 'code runtime =', loop_time, 'min')
         ds.to_netcdf(ds_file)
     
     elapsed_time += space_dt

@@ -40,43 +40,25 @@ from landlab.components import (FlowAccumulator,
 #LOAD INPUT FILES HERE 
 
 #Initial Topography
-#mg = read_netcdf('topo_init_200x200.nc') #200x200 cell grid
-#mg = read_netcdf('topo_init_50x50.nc') #50x50 cell grid
+mg = read_netcdf('Inputs/topo_init_200x200.nc') #200x200 cell grid
+#mg = read_netcdf('Inputs/topo_init_50x50.nc') #50x50 cell grid
 
 #load Parameters
-#inputs = load_params('dtch_params_1200kyr_nx200_Kr5.txt')
-inputs = load_params('params_dtch_SS_layers_40m_1200kyr_kr5.txt')
+inputs = load_params('Inputs/SPM_params_200x200.txt')
+#inputs = load_params('Inputs/SPM_params_50x50.txt')
+
+#specify a filename to save the model output to
+#ds_file = ('Output/SPM_out_50x50.nc')
+ds_file = ('Output/SPM_out_200x200.nc')
 
 
 
 #%%
 #SET UP MODEL GRID
 
-
-#TODO - Are these lines needed? Move elsewhere?
 dx=inputs['dx']
 nx=inputs['nx']
-lith_cmap = plt.cm.get_cmap('Paired', 10)
-model_name = inputs['model_name']
 
-#%%
-#Needed if using the 200x200 grid created with Fastscape eroder - add grid fields (only the 50x50 grids were made w SPACE)
-
-if nx == 200:
-    #Create a field for bedrock elevation
-    mg.add_zeros('node', 'bedrock__elevation')
-    
-    #Initial soil depth, m
-    soil_init = inputs['soil_init']
-    
-    #Create a grid field for soil depth
-    mg.add_zeros('node', 'soil__depth')
-    
-    #Add initial layer of soil
-    mg.at_node['soil__depth'][:] = soil_init
-
-
-#%%    
 #All boundaries are closed except outlet node
 mg.set_closed_boundaries_at_grid_edges(bottom_is_closed=True,
                                        left_is_closed=True,
@@ -101,7 +83,7 @@ plt.show()
 
 lith_start_time = time.time()
 
-print('configuring lithology')
+print('configuring lithology - may take several minutes')
 K_soft = inputs['K_soft']
 K_ratio = inputs['K_ratio']
 
@@ -174,15 +156,16 @@ t = np.arange(0, fsc_runtime+fsc_dt, fsc_dt)
 nts = len(t)
 
 
-#Telling lithology which rock type to deposit when deposition occurs
+#Telling lithology which rock type to deposit if deposition occurs - this shouldn't happen, but lith needs the input
 lith.rock_id=10
 
+#how often to save model output
 if nx <= 50:
     save_interval = 1000
 else:
     save_interval = 10000
 
-save_interval = 1000
+
 
 out_times = np.arange(0, fsc_runtime+save_interval, save_interval)
 out_count = len(out_times)
@@ -236,25 +219,13 @@ ds = xr.Dataset(
             'standard_name': 'time'
         })
     },
+    
+    #save model inputs to ds metadata
     attrs=dict(inputs))
     
     
 #%%
 
-
-
-file_id = f'dtch_{fsc_runtime_kyr}kyr_nx{nx}_Kr{K_ratio}_fsc_ero' 
-
-print(file_id)
-
-
-#%%
-
-path = Path.cwd() / file_id
-path.mkdir(exist_ok=True)
-chdir(path)
-
-#%%
 
 fsc.run_one_step(dt=fsc_dt)
 
@@ -281,7 +252,6 @@ out_fields = ['topographic__elevation', 'rock_type__id', 'bedrock__erosion']
 for of in out_fields:
     ds[of][0, :, :] = mg['node'][of].reshape(mg.shape)
 
-ds_file = file_id + "_ds_qs.nc"
 
 print('Starting LEM loop')
 
@@ -340,7 +310,7 @@ for i in range(nts):
 
 end_time = time.time()
 loop_time = round((end_time - start_time) / 60)
-print('Loop time =', loop_time)
+print('Loop time =', loop_time, ' minutes')
 #%%
 
 plt.figure()
@@ -349,11 +319,6 @@ plt.title('Final Topographic Elevation')
 
 #%%
 
-#save xr dataset to netcdf
-ds_file = file_id + "_ds_final_Qs.nc"
-#ds.to_netcdf(ds_file)
 
-df = pd.DataFrame({ 'outlet_Qs': outlet_Qs_arr })
-df['time']=pd.Series(t)
 
 

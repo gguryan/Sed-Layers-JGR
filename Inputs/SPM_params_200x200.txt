@@ -1,0 +1,25 @@
+model_name: 'Detachment Limited'
+
+#configure model grid
+nx: 200
+ny: 200
+dx: 20 
+
+#configure layers
+K_soft: 1e-5
+K_ratio: 5
+
+layer_thickness : 40. #meters
+
+#stream power exponents
+m_sp : .75
+n_sp : 1.5
+
+#years
+fsc_dt: 40.
+
+#m/yr
+fsc_uplift : .001 
+
+#years
+fsc_runtime : 1200000
