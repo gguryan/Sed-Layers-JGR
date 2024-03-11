@@ -41,14 +41,16 @@ from landlab.components import (FlowAccumulator,
 file_id = "sample_plot_SPACE"
 
 #load in the model output
-ds_file = 'Output/SPACE_out_200x200.nc'
+#ds_file = 'Output/SPM_out_200x200.nc'
+
+ds_file = 'C:/Users/gjg882/Box/UT/Research/Code/space/space_paper/SPACE_out_50x50.nc'
 
 ds = xr.open_dataset(ds_file) 
 
 
 #%%
 #input plot time manually  
-plot_time = 120000
+plot_time = 1200000
 
 #Can also read in model runtime from ds attributes (all input parameters are saved in the ds metadata)
 #plot_time = ds.attrs['space_runtime'] #for space model runs
@@ -60,8 +62,30 @@ plot_time = 120000
 #Calculate main channel, return landlab model grid with channel profiler fields, also returns pandas df with channel data
 mg, df = calc_main_channel(ds, plot_time)
 
+
+#%%plot main channel profle with either sediment thickness or erosion rate on secondary y-axis
+
 fig1 = plt.figure()
+plot_channel_prf(df, ds, plot_time, plot_sed=True, plot_ero=False, ax=None)
+
+
+#%%plot sediment flux at outlet over time
+
+
+fig9 = plt.figure()
+
+if 'outlet__sed_flux' in list(ds.keys()):
+    ds.outlet__sed_flux.plot()
+
+else: 
+    ds['outlet__sed_flux'] = ds.sediment__flux.sel(x=20,y=20) 
+    ds.outlet__sed_flux.plot()
+
+plt.title('Outlet Sediment Flux')
+
+#%%Plot channel steepness
+
+fig = plt.figure()
 plot_ksn(ds, plot_time)
 
-fig2 = plt.figure()
-plot_channel_prf(df, ds, plot_time, plot_sed=True, plot_ero=False, ax=None)
+

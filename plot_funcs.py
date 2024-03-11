@@ -190,6 +190,7 @@ def calc_main_channel(ds, plot_time, sf_min_DA=500, cf_min_DA=500):
     channel_chi = mg.at_node["channel__chi_index"][channel_dist_ids]
     channel_ksn = mg.at_node["channel__steepness_index"][channel_dist_ids]
 
+
     channel_x = []
     channel_y = []
     
@@ -525,4 +526,6 @@ def plot_ksn(ds, plot_time, ax=None):
     ax.set_title(title_string)
     ax.set_ylim(bottom=0, top=350)
     
-    return(ax)
+    return ax
+#%%
+

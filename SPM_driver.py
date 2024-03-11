@@ -39,17 +39,16 @@ from landlab.components import (FlowAccumulator,
 #%%
 #LOAD INPUT FILES HERE 
 
-#Initial Topography
-mg = read_netcdf('Inputs/topo_init_200x200.nc') #200x200 cell grid
-#mg = read_netcdf('Inputs/topo_init_50x50.nc') #50x50 cell grid
+#50x50 grids
+mg = read_netcdf('Inputs/topo_init_50x50.nc') #Load initial topography
+inputs = load_params('Inputs/SPM_params_50x50.txt') #Load parameters from text file
+ds_file = ('Output/SPM_out_50x50.nc') #specify a filename to save the model output to
 
-#load Parameters
-inputs = load_params('Inputs/SPM_params_200x200.txt')
-#inputs = load_params('Inputs/SPM_params_50x50.txt')
 
-#specify a filename to save the model output to
-#ds_file = ('Output/SPM_out_50x50.nc')
-ds_file = ('Output/SPM_out_200x200.nc')
+#200x200 cell example
+#mg = read_netcdf('Inputs/topo_init_200x200.nc')
+#inputs = load_params('Inputs/SPM_params_200x200.txt')
+#ds_file = ('Output/SPM_out_200x200.nc')
 
 
 
@@ -200,6 +199,15 @@ ds = xr.Dataset(
             {
                 'units': 'meters/yr',
                 'long_name': 'Bedrock Erosion'   
+                
+            }),   
+                
+        'outlet__sed_flux' : (
+            ('time'),  # tuple of dimensions
+            np.empty(out_count),  # n-d array of data
+            {
+                'units': 'm3/yr',
+                'long_name': 'Outlet Sediment Flux'   
         })      
     },
         
@@ -298,6 +306,8 @@ for i in range(nts):
     if elapsed_time %save_interval== 0:
         
         ds_ind = int((elapsed_time/save_interval))
+        
+        ds.outlet__sed_flux[ds_ind] = outlet_Qs
     
         for of in out_fields:
             ds[of][ds_ind, :, :] = mg['node'][of].reshape(mg.shape)
@@ -317,8 +327,8 @@ plt.figure()
 imshow_grid(mg, "topographic__elevation")
 plt.title('Final Topographic Elevation')
 
-#%%
 
-
+plt.figure()
+ds.outlet__sed_flux.plot()
 
 
