@@ -41,12 +41,14 @@ from landlab.components import (FlowAccumulator,
 file_id = "sample_plot_SPACE"
 
 #load in the model output
-ds_file = 'Inputs/SPACE_output_50x50.nc'
+ds_file = 'Output/SPACE_out_200x200.nc'
 
 ds = xr.open_dataset(ds_file) 
 
+
+#%%
 #input plot time manually  
-plot_time = 1200000
+plot_time = 120000
 
 #Can also read in model runtime from ds attributes (all input parameters are saved in the ds metadata)
 #plot_time = ds.attrs['space_runtime'] #for space model runs

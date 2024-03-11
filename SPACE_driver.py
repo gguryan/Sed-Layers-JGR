@@ -37,14 +37,17 @@ from landlab.components import (FlowAccumulator,
 #%%
 #LOAD INPUT FILES HERE 
 
-#Initial Topography - 200x200 grid
-mg = read_netcdf('Inputs/topo_init_200x200.nc')
+#200x200 grid inputs
+#mg = read_netcdf('Inputs/topo_init_200x200.nc') #initial topography
+#inputs = load_params('Inputs/SPACE_params_200x200.txt') #load params from text file
+#ds_file = ('Output/SPACE_out_200x200.nc') #filename to save the model output to
 
-#Read in parameters from text file
-inputs = load_params('Inputs/SPACE_params_200x200.txt')
+#50x50 grid inputs
+mg = read_netcdf('Inputs/topo_init_50x50.nc') #initial topography
+inputs = load_params('Inputs/SPACE_params_50x50.txt') #load params from text file
+ds_file = ('Output/SPACE_out_50x50.nc') #filename to save the model output to
 
-#specify a filename to save the model output to
-ds_file = ('Output/SPACE_out_200x200.nc')
+
 
 
 #%%
@@ -343,5 +346,6 @@ loop_time = round((end_time - start_time) / 60)
 print('Loop time =', loop_time)
 #%%plot final topography 
 
+plt.figure()
 imshow_grid(mg, "topographic__elevation")
 plt.title('Final Topographic Elevation')
